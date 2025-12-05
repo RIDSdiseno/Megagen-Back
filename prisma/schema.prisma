@@ -1,0 +1,288 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RolUsuario {
+  ADMINISTRADOR
+  TRABAJADOR
+  SUPERVISOR
+  VENDEDOR
+}
+
+enum EstadoUsuario {
+  ACTIVO
+  PENDIENTE
+  SUSPENDIDO
+}
+
+enum EstadoLead {
+  NUEVO
+  COTIZANDO
+  EN_PROCESO
+  CONFIRMADO
+  ENTREGADO
+}
+
+enum EstadoCliente {
+  ACTIVO
+  ONBOARDING
+  EN_RIESGO
+}
+
+enum EtapaCotizacion {
+  COTIZACION_CONFIRMADA
+  DESPACHO
+  TRANSITO
+  ENTREGADO
+}
+
+enum EtapaOportunidad {
+  PROSPECTO
+  CALIFICADO
+  PROPUESTA
+  NEGOCIACION
+  CERRADO
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  nombre       String
+  email        String        @unique
+  password     String
+  rol          RolUsuario    @default(VENDEDOR)
+  estado       EstadoUsuario @default(PENDIENTE)
+  ultimoAcceso DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  leads         Lead[]                @relation("LeadOwner")
+  cotizaciones  Cotizacion[]          @relation("CotizacionesVendedor")
+  reuniones     Reunion[]             @relation("ReunionesVendedor")
+  eventosEstado CotizacionEstadoLog[] @relation("EstadoAutor")
+
+  clientes      Cliente[]
+  ventas        Venta[]
+  oportunidades Oportunidad[]
+  citas         Cita[]
+}
+
+model Lead {
+  id           Int        @id @default(autoincrement())
+  nombre       String
+  telefono     String
+  correo       String?
+  estado       EstadoLead @default(NUEVO)
+  resumen      String?
+  origen       String?
+  fechaIngreso DateTime   @default(now())
+  proximoPaso  String?
+  nota         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  ownerId Int?
+  owner   User? @relation("LeadOwner", fields: [ownerId], references: [id])
+
+  cotizaciones  Cotizacion[]
+  reuniones     Reunion[]
+  ventas        Venta[]
+  oportunidades Oportunidad[]
+  archivos      Archivo[]
+  citas         Cita[]
+
+  @@index([estado])
+  @@index([ownerId])
+}
+
+model Cliente {
+  id        Int           @id @default(autoincrement())
+  nombre    String
+  correo    String
+  telefono  String
+  estado    EstadoCliente @default(ACTIVO)
+  origen    String?
+  carpeta   String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  vendedorId Int?
+  vendedor   User? @relation(fields: [vendedorId], references: [id])
+
+  archivos Archivo[]
+
+  @@index([estado])
+  @@index([vendedorId])
+}
+
+model Cotizacion {
+  id                Int             @id @default(autoincrement())
+  codigo            String          @unique
+  cliente           String
+  total             String
+  etapa             EtapaCotizacion @default(COTIZACION_CONFIRMADA)
+  resumen           String?
+  fechaCreacion     DateTime        @default(now())
+  direccion         String?
+  comentarios       String?
+  entregaProgramada DateTime?
+  imagenUrl         String?
+
+  vendedorId Int?
+  vendedor   User? @relation("CotizacionesVendedor", fields: [vendedorId], references: [id])
+
+  leadId Int?
+  lead   Lead? @relation(fields: [leadId], references: [id])
+
+  archivos  CotizacionArchivo[]
+  historial CotizacionEstadoLog[]
+  ventas    Venta[]
+  Archivo   Archivo[]
+}
+
+model Venta {
+  id        Int      @id @default(autoincrement())
+  cliente   String
+  monto     Decimal  @db.Decimal(14, 2)
+  moneda    String   @default("CLP")
+  fecha     DateTime @default(now())
+  nota      String?
+  createdAt DateTime @default(now())
+
+  vendedorId Int?
+  vendedor   User? @relation(fields: [vendedorId], references: [id])
+
+  leadId Int?
+  lead   Lead? @relation(fields: [leadId], references: [id])
+
+  cotizacionId Int?
+  cotizacion   Cotizacion? @relation(fields: [cotizacionId], references: [id])
+
+  @@index([vendedorId])
+  @@index([leadId])
+  @@index([cotizacionId])
+}
+
+model Oportunidad {
+  id          Int              @id @default(autoincrement())
+  cliente     String
+  etapa       EtapaOportunidad @default(PROSPECTO)
+  monto       Decimal          @db.Decimal(14, 2)
+  moneda      String           @default("CLP")
+  diasEnEtapa Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  leadId Int?
+  lead   Lead? @relation(fields: [leadId], references: [id])
+
+  vendedorId Int?
+  vendedor   User? @relation(fields: [vendedorId], references: [id])
+
+  @@index([etapa])
+  @@index([vendedorId])
+  @@index([leadId])
+}
+
+model Cita {
+  id              Int         @id @default(autoincrement())
+  titulo          String
+  descripcion     String?
+  inicio          DateTime
+  fin             DateTime
+  estado          EstadoLead?
+  clienteNombre   String?
+  clienteCorreo   String?
+  clienteTelefono String?
+  createdAt       DateTime    @default(now())
+
+  leadId Int?
+  lead   Lead? @relation(fields: [leadId], references: [id])
+
+  vendedorId Int?
+  vendedor   User? @relation(fields: [vendedorId], references: [id])
+
+  @@index([leadId])
+  @@index([vendedorId])
+}
+
+model Archivo {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  url       String
+  tipo      String?
+  createdAt DateTime @default(now())
+
+  leadId Int?
+  lead   Lead? @relation(fields: [leadId], references: [id])
+
+  clienteId Int?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  cotizacionId Int?
+  cotizacion   Cotizacion? @relation(fields: [cotizacionId], references: [id])
+}
+
+model DashboardSnapshot {
+  id       Int      @id @default(autoincrement())
+  etiqueta String
+  valor    String
+  periodo  String?
+  fecha    DateTime @default(now())
+  payload  Json?
+}
+
+model KpiSnapshot {
+  id      Int      @id @default(autoincrement())
+  nombre  String
+  valor   String
+  unidad  String?
+  periodo String?
+  fecha   DateTime @default(now())
+}
+
+model CotizacionArchivo {
+  id           Int        @id @default(autoincrement())
+  nombre       String
+  url          String
+  cotizacionId Int
+  cotizacion   Cotizacion @relation(fields: [cotizacionId], references: [id])
+}
+
+model CotizacionEstadoLog {
+  id           Int             @id @default(autoincrement())
+  etapa        EtapaCotizacion
+  nota         String?
+  createdAt    DateTime        @default(now())
+  cotizacionId Int
+  cotizacion   Cotizacion      @relation(fields: [cotizacionId], references: [id])
+
+  autorId Int?
+  autor   User? @relation("EstadoAutor", fields: [autorId], references: [id])
+
+  @@index([cotizacionId])
+  @@index([autorId])
+}
+
+model Reunion {
+  id          Int         @id @default(autoincrement())
+  titulo      String
+  descripcion String?
+  inicio      DateTime
+  fin         DateTime
+  estado      EstadoLead?
+  createdAt   DateTime    @default(now())
+
+  leadId Int?
+  lead   Lead? @relation(fields: [leadId], references: [id])
+
+  vendedorId Int?
+  vendedor   User? @relation("ReunionesVendedor", fields: [vendedorId], references: [id])
+
+  @@index([leadId])
+  @@index([vendedorId])
+}

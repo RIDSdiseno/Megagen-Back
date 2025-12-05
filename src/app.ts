@@ -5,21 +5,41 @@ import { notFound } from "./middleware/notFound";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
+
+// Lista de dominios permitidos
 const allowedOrigins = [
   "http://localhost:5173",
   "https://megagen.netlify.app"
 ];
-// Necesario para Railway / proxies HTTPS
+
+// Necesario para que Railway no envíe redirect en OPTIONS
 app.set("trust proxy", 1);
 
-// CORS configurado para aceptar peticiones desde tu frontend en Netlify
+// CORS configurado correctamente
 app.use(
   cors({
-    origin: allowedOrigins,  
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    origin: function (origin, callback) {
+      // Permite llamadas sin origin (Postman, backend-to-backend)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Origen no permitido por CORS: " + origin));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204, // <- evita redirecciones en preflight
   })
 );
+
+// Respuesta manual a OPTIONS (preflight) para evitar redirect de Railway
+app.options("*", (req, res) => {
+  res.sendStatus(204);
+});
 
 app.use(express.json());
 

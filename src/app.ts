@@ -3,6 +3,8 @@ import cors from "cors";
 import routes from "./routes";
 import { notFound } from "./middleware/notFound";
 import { errorHandler } from "./middleware/errorHandler";
+import path from "path";
+import fs from "fs";
 
 const app = express();
 
@@ -40,6 +42,11 @@ app.use(
 app.options("*", (req, res) => {
   res.sendStatus(204);
 });
+
+// Archivos estaticos para uploads de cotizaciones
+const uploadsDir = path.join(__dirname, "..", "uploads");
+fs.mkdirSync(uploadsDir, { recursive: true });
+app.use("/uploads", express.static(uploadsDir));
 
 app.use(express.json());
 

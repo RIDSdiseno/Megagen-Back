@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
 import { RolUsuario } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma";
 
 const roleMapping: Record<RolUsuario, string[]> = {
@@ -16,6 +18,9 @@ const roleLabels: Record<RolUsuario, string> = {
   VENDEDOR: "Vendedor",
 };
 
+const JWT_SECRET = process.env.JWT_SECRET || "changeme-in-env";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "8h";
+
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body ?? {};
 
@@ -25,18 +30,34 @@ export const login = async (req: Request, res: Response) => {
 
   try {
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.password !== password) {
+    if (!user) {
       return res.status(401).json({ message: "Credenciales invalidas" });
     }
 
-    const token = `fake-token-${Buffer.from(email).toString("base64")}`;
+    const passwordOk =
+      (await bcrypt.compare(password, user.password).catch(() => false)) || user.password === password;
+    if (!passwordOk) {
+      return res.status(401).json({ message: "Credenciales invalidas" });
+    }
+
+    const roles = roleMapping[user.rol] ?? [];
+    const token = jwt.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        roles,
+        rol: user.rol,
+      },
+      JWT_SECRET as jwt.Secret,
+      { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"] }
+    );
 
     return res.json({
       token,
       user: {
         email: user.email,
         role: roleLabels[user.rol],
-        roles: roleMapping[user.rol] ?? [],
+        roles,
       },
     });
   } catch (err) {

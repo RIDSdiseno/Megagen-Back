@@ -2,30 +2,26 @@ import { Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { EstadoLead, RolUsuario } from "@prisma/client";
 
-const decodeTokenEmail = (auth?: string) => {
-  if (!auth) return undefined;
-  const token = auth.replace("Bearer ", "");
-  if (!token.startsWith("fake-token-")) return undefined;
-  try {
-    const base = token.replace("fake-token-", "");
-    const email = Buffer.from(base, "base64").toString("utf-8");
-    return email;
-  } catch {
-    return undefined;
-  }
+type AuthRequest = Request & {
+  user?: { id: number; email: string; roles: string[]; rol: RolUsuario };
 };
 
 export const listMeetings = async (req: Request, res: Response) => {
   try {
-    const email = decodeTokenEmail(req.headers.authorization);
-    const user = email ? await prisma.user.findUnique({ where: { email } }) : null;
-    const search = typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
+    const { user } = req as AuthRequest;
+    if (!user) return res.status(401).json({ message: "No autenticado" });
 
-    const canSeeAll = user?.rol === RolUsuario.ADMINISTRADOR || user?.rol === RolUsuario.SUPERVISOR;
+    const search = typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
+    const vendedorEmail = typeof req.query.vendedorEmail === "string" ? req.query.vendedorEmail.trim() : "";
+
+    const canSeeAll = user.rol === RolUsuario.ADMINISTRADOR || user.rol === RolUsuario.SUPERVISOR;
 
     const meetings = await prisma.cita.findMany({
       where: {
-        vendedorId: canSeeAll ? undefined : user?.id,
+        vendedorId: canSeeAll
+          ? undefined
+          : user?.id,
+        vendedor: canSeeAll && vendedorEmail ? { email: vendedorEmail } : undefined,
         OR: search
           ? [
               { titulo: { contains: search, mode: "insensitive" } },
@@ -49,7 +45,7 @@ export const listMeetings = async (req: Request, res: Response) => {
         paciente: m.clienteNombre || "",
         telefono: m.clienteTelefono || "",
         correo: m.clienteCorreo || "",
-        ownerEmail: m.vendedor?.email || email || "",
+        ownerEmail: m.vendedor?.email || user.email,
       }))
     );
   } catch (err) {
@@ -65,8 +61,8 @@ export const createMeeting = async (req: Request, res: Response) => {
   }
 
   try {
-    const email = decodeTokenEmail(req.headers.authorization);
-    const user = email ? await prisma.user.findUnique({ where: { email } }) : null;
+    const { user } = req as AuthRequest;
+    if (!user) return res.status(401).json({ message: "No autenticado" });
 
     const cita = await prisma.cita.create({
       data: {
@@ -77,7 +73,7 @@ export const createMeeting = async (req: Request, res: Response) => {
         clienteNombre: clienteNombre || null,
         clienteCorreo: clienteCorreo || null,
         clienteTelefono: clienteTelefono || null,
-        vendedorId: user?.id,
+        vendedorId: user.id,
       },
     });
 
@@ -90,7 +86,7 @@ export const createMeeting = async (req: Request, res: Response) => {
       paciente: cita.clienteNombre || "",
       telefono: cita.clienteTelefono || "",
       correo: cita.clienteCorreo || "",
-      ownerEmail: email || "",
+      ownerEmail: user.email,
     });
   } catch (err) {
     console.error("createMeeting error", err);

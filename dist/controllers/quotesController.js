@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scanQuote = exports.updateDelivery = exports.updateStage = exports.createQuote = exports.summaryQuotes = exports.getQuote = exports.listQuotes = void 0;
+exports.uploadQuoteFile = exports.scanQuote = exports.updateDelivery = exports.updateStage = exports.createQuote = exports.summaryQuotes = exports.getQuote = exports.listQuotes = void 0;
+const client_1 = require("@prisma/client");
 const prisma_1 = require("../lib/prisma");
 const etapasOrden = ["Cotizacion confirmada", "Despacho", "Transito", "Entregado"];
 const labelToEnum = {
@@ -26,28 +27,39 @@ const mapQuote = (q) => ({
     resumen: q.resumen ?? "",
     direccion: q.direccion ?? "",
     comentarios: q.comentarios ?? "",
-    imagenUrl: q.imagenUrl ?? undefined,
-    archivos: (q.archivos ?? []).map((a) => a.nombre),
+    imagenUrl: q.imagenUrl ??
+        (q.archivos ?? []).find((a) => (a.url || "").match(/\.(png|jpe?g|gif|webp)$/i))?.url ??
+        undefined,
+    archivos: (q.archivos ?? []).map((a) => a.url || a.nombre),
     historico: (q.historial ?? []).map((h) => ({
         fecha: h.createdAt ? formatDateTime(h.createdAt) : "",
         nota: h.nota ?? "",
     })),
     entregaProgramada: q.entregaProgramada ? formatDateTime(q.entregaProgramada) : undefined,
+    vendedorEmail: q.vendedor?.email ?? null,
 });
 const listQuotes = async (req, res) => {
     try {
+        const { user } = req;
         const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+        const vendedorEmail = typeof req.query.vendedorEmail === "string" ? req.query.vendedorEmail.trim() : "";
+        const where = {};
+        if (search) {
+            where.OR = [
+                { cliente: { contains: search, mode: "insensitive" } },
+                { resumen: { contains: search, mode: "insensitive" } },
+                { codigo: { contains: search, mode: "insensitive" } },
+            ];
+        }
+        if (vendedorEmail) {
+            where.vendedor = { email: vendedorEmail };
+        }
+        if (user?.rol === client_1.RolUsuario.TRABAJADOR) {
+            where.vendedorId = user.id;
+        }
         const quotes = await prisma_1.prisma.cotizacion.findMany({
-            where: search
-                ? {
-                    OR: [
-                        { cliente: { contains: search, mode: "insensitive" } },
-                        { resumen: { contains: search, mode: "insensitive" } },
-                        { codigo: { contains: search, mode: "insensitive" } },
-                    ],
-                }
-                : undefined,
-            include: { archivos: true, historial: { orderBy: { createdAt: "asc" } } },
+            where,
+            include: { archivos: true, historial: { orderBy: { createdAt: "asc" } }, vendedor: true },
             orderBy: { id: "desc" },
         });
         return res.json(quotes.map(mapQuote));
@@ -65,7 +77,7 @@ const getQuote = async (req, res) => {
     try {
         const quote = await prisma_1.prisma.cotizacion.findUnique({
             where: { id },
-            include: { archivos: true, historial: { orderBy: { createdAt: "asc" } } },
+            include: { archivos: true, historial: { orderBy: { createdAt: "asc" } }, vendedor: true },
         });
         if (!quote)
             return res.status(404).json({ message: "Cotizacion no encontrada" });
@@ -98,6 +110,7 @@ const createQuote = async (req, res) => {
         return res.status(400).json({ message: "Cliente y total son obligatorios" });
     }
     try {
+        const { user } = req;
         const last = await prisma_1.prisma.cotizacion.findFirst({ orderBy: { id: "desc" } });
         const nextId = last ? last.id + 1 : 1;
         const etapaEnum = labelToEnum[body.etapa] ?? "COTIZACION_CONFIRMADA";
@@ -114,17 +127,17 @@ const createQuote = async (req, res) => {
                 entregaProgramada: body.entregaProgramada ? new Date(body.entregaProgramada) : undefined,
                 imagenUrl: body.imagenUrl || null,
                 leadId: body.leadId ?? null,
-                vendedorId: body.vendedorId ?? null,
+                vendedorId: user?.id ?? body.vendedorId ?? null,
                 archivos: {
                     create: Array.isArray(body.archivos)
                         ? body.archivos.map((nombre) => ({ nombre, url: nombre }))
                         : [],
                 },
                 historial: {
-                    create: [{ etapa: etapaEnum, nota: "Cotizacion creada" }],
+                    create: [{ etapa: etapaEnum, nota: "Cotizacion creada", autorId: user?.id }],
                 },
             },
-            include: { archivos: true, historial: true },
+            include: { archivos: true, historial: true, vendedor: true },
         });
         return res.status(201).json(mapQuote(nueva));
     }
@@ -143,9 +156,10 @@ const updateStage = async (req, res) => {
         return res.status(400).json({ message: "Etapa no valida" });
     }
     try {
+        const { user } = req;
         const quote = await prisma_1.prisma.cotizacion.findUnique({
             where: { id },
-            include: { historial: { orderBy: { createdAt: "asc" } }, archivos: true },
+            include: { historial: { orderBy: { createdAt: "asc" } }, archivos: true, vendedor: true },
         });
         if (!quote)
             return res.status(404).json({ message: "Cotizacion no encontrada" });
@@ -158,6 +172,7 @@ const updateStage = async (req, res) => {
                     cotizacionId: id,
                     etapa: quote.etapa,
                     nota: "Intento de retroceso bloqueado",
+                    autorId: user?.id,
                 },
             });
             const refreshed = await prisma_1.prisma.cotizacion.findUnique({
@@ -177,10 +192,16 @@ const updateStage = async (req, res) => {
             data: {
                 etapa: labelToEnum[etapaLabel],
                 historial: {
-                    create: [{ etapa: labelToEnum[etapaLabel], nota: `Etapa cambiada a ${etapaLabel}` }],
+                    create: [
+                        {
+                            etapa: labelToEnum[etapaLabel],
+                            nota: `Etapa cambiada a ${etapaLabel}`,
+                            autorId: user?.id,
+                        },
+                    ],
                 },
             },
-            include: { historial: { orderBy: { createdAt: "asc" } }, archivos: true },
+            include: { historial: { orderBy: { createdAt: "asc" } }, archivos: true, vendedor: true },
         });
         return res.json(mapQuote(updated));
     }
@@ -198,15 +219,22 @@ const updateDelivery = async (req, res) => {
     if (!entregaProgramada)
         return res.status(400).json({ message: "entregaProgramada es obligatoria" });
     try {
+        const { user } = req;
         const updated = await prisma_1.prisma.cotizacion.update({
             where: { id },
             data: {
                 entregaProgramada: new Date(entregaProgramada),
                 historial: {
-                    create: [{ etapa: "TRANSITO", nota: `Entrega programada: ${entregaProgramada}` }],
+                    create: [
+                        {
+                            etapa: "TRANSITO",
+                            nota: `Entrega programada: ${entregaProgramada}`,
+                            autorId: user?.id,
+                        },
+                    ],
                 },
             },
-            include: { historial: { orderBy: { createdAt: "asc" } }, archivos: true },
+            include: { historial: { orderBy: { createdAt: "asc" } }, archivos: true, vendedor: true },
         });
         return res.json(mapQuote(updated));
     }
@@ -227,3 +255,42 @@ const scanQuote = (_req, res) => {
     });
 };
 exports.scanQuote = scanQuote;
+const uploadQuoteFile = async (req, res) => {
+    const id = Number(req.params.id);
+    const file = req.file;
+    if (Number.isNaN(id))
+        return res.status(400).json({ message: "ID invalido" });
+    if (!file)
+        return res.status(400).json({ message: "Archivo es obligatorio" });
+    try {
+        const exists = await prisma_1.prisma.cotizacion.findUnique({ where: { id } });
+        if (!exists)
+            return res.status(404).json({ message: "Cotizacion no encontrada" });
+        const publicPath = `/uploads/${file.filename}`;
+        await prisma_1.prisma.cotizacionArchivo.create({
+            data: {
+                nombre: file.originalname,
+                url: publicPath,
+                cotizacionId: id,
+            },
+        });
+        if (file.mimetype.startsWith("image/")) {
+            await prisma_1.prisma.cotizacion.update({
+                where: { id },
+                data: { imagenUrl: publicPath },
+            });
+        }
+        const refreshed = await prisma_1.prisma.cotizacion.findUnique({
+            where: { id },
+            include: { archivos: true, historial: { orderBy: { createdAt: "asc" } }, vendedor: true },
+        });
+        if (!refreshed)
+            return res.status(404).json({ message: "Cotizacion no encontrada" });
+        return res.status(201).json(mapQuote(refreshed));
+    }
+    catch (err) {
+        console.error("uploadQuoteFile error", err);
+        return res.status(500).json({ message: "No se pudo adjuntar el archivo" });
+    }
+};
+exports.uploadQuoteFile = uploadQuoteFile;

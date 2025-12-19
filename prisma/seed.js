@@ -1,4 +1,4 @@
-const { PrismaClient, RolUsuario, EstadoUsuario, EstadoLead, EstadoCliente, EtapaCotizacion, EtapaOportunidad } =
+const { PrismaClient, RolUsuario, EstadoUsuario, EstadoLead, EstadoCliente, EtapaCotizacion, EtapaOportunidad, TerrenoTipo, VisitaEstado } =
   require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
@@ -165,6 +165,134 @@ async function seed() {
         ],
       },
     },
+  });
+
+  await prisma.terrenoHistorial.createMany({
+    data: [
+      {
+        fecha: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        tipo: TerrenoTipo.SALIDA,
+        titulo: "Salida a despacho zona norte",
+        detalle: "Retiro de insumos y despacho a Clinica Smile",
+        ubicacion: "Bodega Central",
+        documento: "hoja_ruta_001.pdf",
+        bodegueroId: hashedUsers["bodega@megagen.cl"].id,
+        cotizacionId: cot2.id,
+      },
+      {
+        fecha: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+        tipo: TerrenoTipo.ENTREGA,
+        titulo: "Entrega parcial COT-700",
+        detalle: "Se entrega primera parte del pedido, pendiente confirmar recepcion",
+        ubicacion: "Valdivia",
+        documento: "comprobante_entrega_700.png",
+        bodegueroId: hashedUsers["bodega@megagen.cl"].id,
+        cotizacionId: cot1.id,
+      },
+      {
+        fecha: new Date(),
+        tipo: TerrenoTipo.DEVOLUCION,
+        titulo: "Devolucion de guia anterior",
+        detalle: "Cliente solicito cambio de aditamentos",
+        ubicacion: "Providencia",
+        documento: "devolucion_guia.pdf",
+        bodegueroId: hashedUsers["soporte@megagen.cl"].id,
+        cotizacionId: cot1.id,
+      },
+    ],
+  });
+
+  await prisma.visitaTerreno.createMany({
+    data: [
+      {
+        fecha: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
+        estado: VisitaEstado.PROGRAMADA,
+        cliente: "Clinica Horizonte",
+        direccion: "Los Olivos 2233, Nuñoa",
+        motivo: "Validar recepción y armado de kit",
+        resultado: "",
+        comentarios: "Confirmar hora con odontologo",
+        bodegueroId: hashedUsers["bodega@megagen.cl"].id,
+        cotizacionId: cot1.id,
+      },
+      {
+        fecha: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+        estado: VisitaEstado.COMPLETADA,
+        cliente: "Centro Andes",
+        direccion: "Av. Alemania 455, Temuco",
+        motivo: "Entrega en terreno y confirmacion de stock",
+        resultado: "Entrega realizada, cliente conforme",
+        comentarios: "Adjuntar fotos en carpeta compartida",
+        bodegueroId: hashedUsers["soporte@megagen.cl"].id,
+        cotizacionId: cot2.id,
+      },
+      {
+        fecha: new Date(),
+        estado: VisitaEstado.EN_CURSO,
+        cliente: "Clinica Smile",
+        direccion: "Av. America 2280, Conchali",
+        motivo: "Retiro de devoluciones y control de stock",
+        resultado: "",
+        comentarios: "Coordinar con supervisor norte",
+        bodegueroId: hashedUsers["bodega@megagen.cl"].id,
+        cotizacionId: cot2.id,
+      },
+      {
+        fecha: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+        estado: VisitaEstado.CANCELADA,
+        cliente: "Clinica Horizonte",
+        direccion: "Los Olivos 2233, Nuñoa",
+        motivo: "Visita de control de stock",
+        resultado: "Cliente reagendó para próxima semana",
+        comentarios: "Reprogramar con bodega central",
+        bodegueroId: hashedUsers["soporte@megagen.cl"].id,
+        cotizacionId: cot1.id,
+      },
+      {
+        fecha: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        estado: VisitaEstado.COMPLETADA,
+        cliente: "Dental Sur",
+        direccion: "Av Alemania 455, Temuco",
+        motivo: "Entrega completa de COT-304",
+        resultado: "Firmado por recepcionista",
+        comentarios: "Adjuntar comprobante",
+        bodegueroId: hashedUsers["bodega@megagen.cl"].id,
+        cotizacionId: cot2.id,
+      },
+      {
+        fecha: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+        estado: VisitaEstado.PROGRAMADA,
+        cliente: "OdontoPlus SPA",
+        direccion: "Av. Apoquindo 4500, Las Condes",
+        motivo: "Instalacion de kit guiado",
+        resultado: "",
+        comentarios: "Coordinar acceso a bodega local",
+        bodegueroId: hashedUsers["bodega@megagen.cl"].id,
+        cotizacionId: cot1.id,
+      },
+      {
+        fecha: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        estado: VisitaEstado.EN_CURSO,
+        cliente: "Centro Maxilar",
+        direccion: "Pedro de Valdivia 1000, Providencia",
+        motivo: "Entrega parcial COT-302",
+        resultado: "",
+        comentarios: "Esperando firma de recepcion",
+        bodegueroId: hashedUsers["soporte@megagen.cl"].id,
+        cotizacionId: cot1.id,
+      },
+      {
+        fecha: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+        estado: VisitaEstado.COMPLETADA,
+        cliente: "Clinica Horizonte",
+        direccion: "Los Olivos 2233, Nunoa",
+        motivo: "Revision post entrega",
+        resultado: "Cliente conforme, sin observaciones",
+        comentarios: "Cargar fotos en drive",
+        bodegueroId: hashedUsers["bodega@megagen.cl"].id,
+        cotizacionId: cot2.id,
+      },
+    ],
   });
 
   // Cotizaciones adicionales (semilla rápida para pruebas)

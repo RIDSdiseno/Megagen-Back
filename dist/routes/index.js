@@ -10,6 +10,7 @@ const dashboardController_1 = require("../controllers/dashboardController");
 const auth_1 = require("../middleware/auth");
 const quotesController_1 = require("../controllers/quotesController");
 const meetingsController_1 = require("../controllers/meetingsController");
+const terrainController_1 = require("../controllers/terrainController");
 const multer_1 = __importDefault(require("multer"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
@@ -43,4 +44,8 @@ router.post("/quotes/:id/files", auth_1.authRequired, (0, auth_1.requireRoles)([
 router.get("/meetings", auth_1.authRequired, (0, auth_1.requireRoles)(["admin", "superadmin", "supervisor", "vendedor"]), meetingsController_1.listMeetings);
 router.post("/meetings", auth_1.authRequired, (0, auth_1.requireRoles)(["admin", "superadmin", "supervisor", "vendedor"]), meetingsController_1.createMeeting);
 router.patch("/meetings/:id/status", auth_1.authRequired, (0, auth_1.requireRoles)(["admin", "superadmin", "supervisor", "vendedor"]), meetingsController_1.updateMeetingStatus);
+router.get("/terrain/history", auth_1.authRequired, (0, auth_1.requireRoles)(["admin", "superadmin", "supervisor", "bodeguero"]), terrainController_1.listTerrainHistory);
+router.post("/terrain/history", auth_1.authRequired, (0, auth_1.requireRoles)(["admin", "superadmin", "supervisor", "bodeguero"]), terrainController_1.createTerrainHistory);
+router.get("/terrain/visits", auth_1.authRequired, (0, auth_1.requireRoles)(["admin", "superadmin", "supervisor", "bodeguero"]), terrainController_1.listTerrainVisits);
+router.post("/terrain/visits", auth_1.authRequired, (0, auth_1.requireRoles)(["admin", "superadmin", "supervisor", "bodeguero"]), terrainController_1.createTerrainVisit);
 exports.default = router;

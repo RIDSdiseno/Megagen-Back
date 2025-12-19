@@ -14,6 +14,12 @@ import {
   uploadQuoteFile,
 } from "../controllers/quotesController";
 import { listMeetings, createMeeting, updateMeetingStatus } from "../controllers/meetingsController";
+import {
+  listTerrainHistory,
+  listTerrainVisits,
+  createTerrainHistory,
+  createTerrainVisit,
+} from "../controllers/terrainController";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -126,6 +132,31 @@ router.patch(
   authRequired,
   requireRoles(["admin", "superadmin", "supervisor", "vendedor"]),
   updateMeetingStatus
+);
+
+router.get(
+  "/terrain/history",
+  authRequired,
+  requireRoles(["admin", "superadmin", "supervisor", "bodeguero"]),
+  listTerrainHistory
+);
+router.post(
+  "/terrain/history",
+  authRequired,
+  requireRoles(["admin", "superadmin", "supervisor", "bodeguero"]),
+  createTerrainHistory
+);
+router.get(
+  "/terrain/visits",
+  authRequired,
+  requireRoles(["admin", "superadmin", "supervisor", "bodeguero"]),
+  listTerrainVisits
+);
+router.post(
+  "/terrain/visits",
+  authRequired,
+  requireRoles(["admin", "superadmin", "supervisor", "bodeguero"]),
+  createTerrainVisit
 );
 
 export default router;

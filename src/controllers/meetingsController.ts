@@ -121,3 +121,55 @@ export const updateMeetingStatus = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "No se pudo actualizar la reunion" });
   }
 };
+
+export const updateMeeting = async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ message: "ID invalido" });
+
+  try {
+    const { user } = req as AuthRequest;
+    if (!user) return res.status(401).json({ message: "No autenticado" });
+
+    const canSeeAll = user.rol === RolUsuario.ADMINISTRADOR || user.rol === RolUsuario.SUPERVISOR;
+    const existente = await prisma.cita.findUnique({ where: { id }, include: { vendedor: true } });
+    if (!existente) return res.status(404).json({ message: "Reunion no encontrada" });
+    if (!canSeeAll && existente.vendedorId !== user.id) {
+      return res.status(403).json({ message: "No puedes modificar esta reunion" });
+    }
+
+    const { title, start, end, estado, clienteNombre, clienteCorreo, clienteTelefono } = req.body ?? {};
+    const data: any = {};
+    if (title !== undefined) data.titulo = title;
+    if (start) data.inicio = new Date(start);
+    if (end) data.fin = new Date(end);
+    if (estado && Object.values(EstadoLead).includes(estado)) data.estado = estado;
+    if (clienteNombre !== undefined) data.clienteNombre = clienteNombre || null;
+    if (clienteCorreo !== undefined) data.clienteCorreo = clienteCorreo || null;
+    if (clienteTelefono !== undefined) data.clienteTelefono = clienteTelefono || null;
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ message: "Sin cambios" });
+    }
+
+    const updated = await prisma.cita.update({
+      where: { id },
+      data,
+      include: { vendedor: true },
+    });
+
+    return res.json({
+      id: updated.id,
+      title: updated.titulo,
+      start: updated.inicio,
+      end: updated.fin,
+      estado: updated.estado,
+      paciente: updated.clienteNombre || "",
+      telefono: updated.clienteTelefono || "",
+      correo: updated.clienteCorreo || "",
+      ownerEmail: updated.vendedor?.email || user.email,
+    });
+  } catch (err) {
+    console.error("updateMeeting error", err);
+    return res.status(500).json({ message: "No se pudo actualizar la reunion" });
+  }
+};

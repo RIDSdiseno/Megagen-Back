@@ -13,13 +13,14 @@ import {
   updateStage,
   uploadQuoteFile,
 } from "../controllers/quotesController";
-import { listMeetings, createMeeting, updateMeetingStatus } from "../controllers/meetingsController";
+import { listMeetings, createMeeting, updateMeetingStatus, updateMeeting } from "../controllers/meetingsController";
 import {
   listTerrainHistory,
   listTerrainVisits,
   createTerrainHistory,
   createTerrainVisit,
 } from "../controllers/terrainController";
+import { listClients } from "../controllers/clientsController";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -63,6 +64,13 @@ router.get(
   authRequired,
   requireRoles(["admin", "superadmin", "bodeguero"]),
   bodegaDashboard
+);
+
+router.get(
+  "/clients",
+  authRequired,
+  requireRoles(["admin", "superadmin", "supervisor", "vendedor"]),
+  listClients
 );
 
 router.get(
@@ -126,6 +134,12 @@ router.post(
   authRequired,
   requireRoles(["admin", "superadmin", "supervisor", "vendedor"]),
   createMeeting
+);
+router.patch(
+  "/meetings/:id",
+  authRequired,
+  requireRoles(["admin", "superadmin", "supervisor", "vendedor"]),
+  updateMeeting
 );
 router.patch(
   "/meetings/:id/status",
